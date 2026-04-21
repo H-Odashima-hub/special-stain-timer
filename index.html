@@ -1,0 +1,1712 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="description" content="病理検査の特殊染色プロトコルを管理する、ブラウザベースのタイマーアプリ。複数のタイマーを並行運用でき、カスタム染色の追加・編集にも対応。">
+<meta name="theme-color" content="#2563eb">
+<meta property="og:title" content="特殊染色タイマー / Special Stain Timer">
+<meta property="og:description" content="病理検査の特殊染色プロトコルを管理する、ブラウザベースのタイマーアプリ。インストール不要、オフライン動作。">
+<meta property="og:type" content="website">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="染色タイマー">
+<title>特殊染色タイマー</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --primary-light: #dbeafe;
+  --success: #16a34a;
+  --success-light: #dcfce7;
+  --danger: #dc2626;
+  --danger-light: #fee2e2;
+  --warning: #f59e0b;
+  --gray-50: #f9fafb;
+  --gray-100: #f3f4f6;
+  --gray-200: #e5e7eb;
+  --gray-300: #d1d5db;
+  --gray-400: #9ca3af;
+  --gray-500: #6b7280;
+  --gray-600: #4b5563;
+  --gray-700: #374151;
+  --gray-800: #1f2937;
+  --radius: 12px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+}
+
+html { font-size: 16px; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+  background: var(--gray-50);
+  color: var(--gray-800);
+  min-height: 100dvh;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.screen { display: none; min-height: 100dvh; }
+.screen.active { display: flex; flex-direction: column; }
+
+/* ===== Header ===== */
+.header {
+  background: #fff;
+  border-bottom: 1px solid var(--gray-200);
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.header h1 { font-size: 1.25rem; font-weight: 700; }
+.header-sub { font-size: 0.85rem; color: var(--gray-500); }
+.header-spacer { flex: 1; }
+.btn-back {
+  background: none; border: none; font-size: 1.5rem; cursor: pointer;
+  color: var(--primary); padding: 4px 8px; border-radius: 8px;
+  display: flex; align-items: center;
+}
+.btn-back:active { background: var(--gray-100); }
+
+/* Badge for active timer count */
+.badge-btn {
+  position: relative;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  padding: 10px 18px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.badge-btn:hover { background: var(--primary-dark); }
+.badge-btn .badge-count {
+  background: #fff;
+  color: var(--primary);
+  border-radius: 50%;
+  width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.75rem; font-weight: 700;
+}
+.badge-btn.hidden { display: none; }
+
+/* ===== Footer ===== */
+.app-footer {
+  padding: 20px;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--gray-400);
+  border-top: 1px solid var(--gray-200);
+  background: #fff;
+  line-height: 1.6;
+}
+.app-footer a { color: var(--gray-500); text-decoration: none; }
+.app-footer a:hover { color: var(--primary); text-decoration: underline; }
+.app-footer .footer-warning { color: var(--warning); font-weight: 600; }
+.app-footer .footer-sep { margin: 0 8px; color: var(--gray-300); }
+
+/* ===== Import/Export Section ===== */
+.io-section {
+  margin-bottom: 32px;
+}
+.io-buttons {
+  display: flex; gap: 10px; flex-wrap: wrap;
+}
+.io-btn {
+  border: 2px solid var(--gray-200);
+  background: #fff;
+  border-radius: var(--radius);
+  padding: 12px 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--gray-700);
+  transition: all 0.15s;
+}
+.io-btn:hover { border-color: var(--primary); color: var(--primary); }
+.io-btn:active { transform: scale(0.97); }
+.io-btn-export { border-color: var(--success); color: var(--success); }
+.io-btn-export:hover { background: var(--success-light); }
+.io-btn-import { border-color: var(--primary); color: var(--primary); }
+.io-btn-import:hover { background: var(--primary-light); }
+input.io-file-input { display: none; }
+
+/* Import result toast */
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: var(--gray-800); color: #fff;
+  padding: 14px 24px; border-radius: var(--radius);
+  font-size: 0.9rem; font-weight: 600;
+  box-shadow: var(--shadow-lg);
+  z-index: 200;
+  opacity: 0; transition: opacity 0.3s;
+  pointer-events: none;
+  max-width: 90vw; text-align: center;
+}
+.toast.show { opacity: 1; }
+.toast.error { background: var(--danger); }
+
+/* ===== Select Screen ===== */
+.select-body { flex: 1; padding: 20px; overflow-y: auto; }
+.section-title {
+  font-size: 0.85rem; font-weight: 600; color: var(--gray-500);
+  text-transform: uppercase; letter-spacing: 0.05em;
+  margin-bottom: 12px; padding-left: 4px;
+}
+.stain-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin-bottom: 32px;
+}
+.stain-card {
+  background: #fff;
+  border: 2px solid var(--gray-200);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.stain-card:hover { border-color: var(--primary); box-shadow: var(--shadow); }
+.stain-card:active { transform: scale(0.98); }
+.stain-card .stain-name { font-size: 1.1rem; font-weight: 700; }
+.stain-card .stain-name-en { font-size: 0.8rem; color: var(--gray-400); }
+.stain-card .stain-meta {
+  display: flex; gap: 16px; font-size: 0.8rem; color: var(--gray-500); margin-top: 4px;
+}
+.stain-card.custom-card { border-style: dashed; }
+
+.btn-add-custom {
+  background: #fff;
+  border: 2px dashed var(--primary);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  cursor: pointer;
+  color: var(--primary);
+  font-size: 1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.15s;
+}
+.btn-add-custom:hover { background: var(--primary-light); }
+
+/* Custom stain actions */
+.custom-actions {
+  display: flex; gap: 8px; margin-top: 8px;
+}
+.custom-actions button {
+  border: none; padding: 6px 14px; border-radius: 8px;
+  font-size: 0.8rem; font-weight: 600; cursor: pointer;
+}
+.btn-edit-custom, .btn-edit-preset { background: var(--primary-light); color: var(--primary); }
+.btn-delete-custom { background: var(--danger-light); color: var(--danger); }
+.btn-reset-preset { background: var(--gray-100); color: var(--gray-500); }
+.btn-reset-preset:hover { background: var(--gray-200); }
+
+/* Edited preset indicator */
+.stain-card .edited-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--warning);
+  background: #fef3c7;
+  padding: 1px 8px;
+  border-radius: 6px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+/* Preset card actions (same style as custom) */
+.preset-actions {
+  display: flex; gap: 8px; margin-top: 8px;
+}
+.preset-actions button {
+  border: none; padding: 6px 14px; border-radius: 8px;
+  font-size: 0.8rem; font-weight: 600; cursor: pointer;
+}
+
+/* ===== Dashboard Screen ===== */
+.dashboard-body {
+  flex: 1; padding: 20px; overflow-y: auto;
+}
+.dashboard-empty {
+  text-align: center; padding: 60px 20px; color: var(--gray-400);
+}
+.dashboard-empty p { font-size: 1.1rem; margin-bottom: 16px; }
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+
+/* ===== Timer Card ===== */
+.timer-card {
+  background: #fff;
+  border: 2px solid var(--gray-200);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  transition: border-color 0.2s;
+}
+.timer-card.running { border-color: var(--primary); }
+.timer-card.step-done { border-color: var(--warning); }
+.timer-card.all-done { border-color: var(--success); }
+
+.tc-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--gray-50);
+  border-bottom: 1px solid var(--gray-200);
+}
+.tc-header-info { flex: 1; min-width: 0; }
+.tc-header-name {
+  font-size: 1rem; font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tc-header-en {
+  font-size: 0.75rem; color: var(--gray-400);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tc-close {
+  background: var(--gray-200); border: none; color: var(--gray-500);
+  width: 32px; height: 32px; border-radius: 8px;
+  cursor: pointer; font-size: 1.1rem; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.tc-close:hover { background: var(--danger-light); color: var(--danger); }
+
+.tc-body { padding: 16px; text-align: center; }
+
+.tc-step-label { font-size: 0.8rem; color: var(--gray-500); margin-bottom: 2px; }
+.tc-step-name { font-size: 1.15rem; font-weight: 700; margin-bottom: 4px; min-height: 1.5em; }
+.tc-step-note { font-size: 0.8rem; color: var(--gray-500); margin-bottom: 12px; min-height: 1.2em; }
+
+.tc-timer {
+  font-size: 3.2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  margin-bottom: 12px;
+}
+.tc-timer.warning { color: var(--warning); }
+.tc-timer.danger { color: var(--danger); animation: pulse 1s infinite; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.tc-progress {
+  width: 100%; height: 6px;
+  background: var(--gray-200);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.tc-progress-bar {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 3px;
+  transition: width 0.3s linear;
+}
+
+.tc-controls {
+  display: flex; gap: 8px; justify-content: center;
+}
+.tc-btn {
+  border: none; border-radius: 10px;
+  padding: 10px 22px; font-size: 0.9rem; font-weight: 600;
+  cursor: pointer; display: flex; align-items: center; gap: 6px;
+  transition: all 0.15s; min-height: 44px;
+}
+.tc-btn:active { transform: scale(0.95); }
+.tc-btn-primary { background: var(--primary); color: #fff; }
+.tc-btn-primary:hover { background: var(--primary-dark); }
+.tc-btn-secondary { background: var(--gray-200); color: var(--gray-700); }
+.tc-btn-secondary:hover { background: var(--gray-300); }
+.tc-btn-success { background: var(--success); color: #fff; }
+.tc-btn-success:hover { background: #15803d; }
+.tc-btn-icon { padding: 10px 14px; }
+
+/* Completed state in card */
+.tc-completed {
+  padding: 24px 16px;
+  text-align: center;
+}
+.tc-completed-icon { font-size: 2.5rem; margin-bottom: 8px; }
+.tc-completed-text { font-size: 1rem; font-weight: 600; color: var(--success); }
+
+/* Step list inside card */
+.tc-steps {
+  border-top: 1px solid var(--gray-200);
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+.tc-steps.expanded { max-height: 600px; overflow-y: auto; }
+.tc-steps-inner { padding: 12px 16px; }
+
+.tc-toggle {
+  display: flex; align-items: center; justify-content: center;
+  padding: 8px; border-top: 1px solid var(--gray-200);
+  cursor: pointer; color: var(--gray-400); font-size: 0.8rem;
+  gap: 4px; user-select: none;
+  background: none; border-left: none; border-right: none; border-bottom: none;
+  width: 100%; font-family: inherit;
+}
+.tc-toggle:hover { background: var(--gray-50); color: var(--gray-600); }
+.tc-toggle-arrow { transition: transform 0.3s; display: inline-block; }
+.tc-toggle-arrow.open { transform: rotate(180deg); }
+
+.step-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border-radius: 8px; margin-bottom: 2px; font-size: 0.85rem;
+}
+.step-item.active { background: var(--primary-light); font-weight: 600; }
+.step-item.completed { color: var(--gray-400); text-decoration: line-through; }
+.step-number {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--gray-200);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.7rem; font-weight: 700; flex-shrink: 0;
+}
+.step-item.active .step-number { background: var(--primary); color: #fff; }
+.step-item.completed .step-number { background: var(--success-light); color: var(--success); }
+.step-name { flex: 1; }
+.step-duration { color: var(--gray-500); font-size: 0.8rem; flex-shrink: 0; }
+
+/* Flash overlay */
+.flash-overlay {
+  position: fixed; inset: 0;
+  background: rgba(220, 38, 38, 0.15);
+  z-index: 100; pointer-events: none; opacity: 0;
+}
+.flash-overlay.active { animation: flash 0.5s ease-in-out 3; }
+@keyframes flash {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
+}
+
+/* ===== Custom Editor Screen ===== */
+.custom-body { flex: 1; padding: 20px; overflow-y: auto; }
+.form-group { margin-bottom: 20px; }
+.form-label {
+  display: block; font-size: 0.85rem; font-weight: 600;
+  color: var(--gray-600); margin-bottom: 6px;
+}
+.form-input {
+  width: 100%; padding: 12px 16px;
+  border: 2px solid var(--gray-200); border-radius: 10px;
+  font-size: 1rem; background: #fff; transition: border-color 0.15s;
+}
+.form-input:focus { outline: none; border-color: var(--primary); }
+
+.step-editor { margin-bottom: 16px; }
+.step-editor-item {
+  display: flex; gap: 8px; align-items: center; margin-bottom: 8px;
+  background: #fff; padding: 12px; border-radius: 10px; border: 1px solid var(--gray-200);
+}
+.step-editor-item .step-num {
+  font-weight: 700; color: var(--gray-400); width: 24px; text-align: center; flex-shrink: 0;
+}
+.step-editor-item input { flex: 1; min-width: 0; }
+.step-editor-item .form-input { padding: 8px 12px; }
+.step-editor-item .input-time { width: 80px; flex: 0 0 80px; text-align: center; }
+.step-editor-item .input-note { flex: 0.6; }
+.btn-remove-step {
+  background: var(--danger-light); border: none; color: var(--danger);
+  width: 36px; height: 36px; border-radius: 8px;
+  cursor: pointer; font-size: 1.2rem; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.btn-remove-step:hover { background: #fecaca; }
+
+.step-editor-header {
+  display: flex; gap: 8px; align-items: center;
+  padding: 0 12px 6px; font-size: 0.75rem; font-weight: 600; color: var(--gray-400);
+}
+.seh-num { width: 24px; flex-shrink: 0; }
+.seh-name { flex: 1; }
+.seh-time { width: 80px; flex: 0 0 80px; text-align: center; }
+.seh-note { flex: 0.6; }
+.seh-del { width: 36px; flex-shrink: 0; }
+
+.btn-add-step {
+  background: var(--primary-light); border: 2px dashed var(--primary);
+  border-radius: 10px; padding: 10px; width: 100%; cursor: pointer;
+  color: var(--primary); font-size: 0.9rem; font-weight: 600;
+}
+.btn-add-step:hover { background: #bfdbfe; }
+
+.form-actions {
+  display: flex; gap: 12px; padding: 20px;
+  background: #fff; border-top: 1px solid var(--gray-200);
+}
+.form-actions .btn {
+  flex: 1; justify-content: center;
+  border: none; border-radius: var(--radius);
+  padding: 14px 28px; font-size: 1rem; font-weight: 600;
+  cursor: pointer; display: flex; align-items: center; gap: 8px;
+  min-height: 52px;
+}
+.form-actions .btn:active { transform: scale(0.96); }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-secondary { background: var(--gray-200); color: var(--gray-700); }
+.btn-secondary:hover { background: var(--gray-300); }
+
+/* ===== Responsive ===== */
+@media (max-width: 480px) {
+  .tc-timer { font-size: 2.5rem; }
+  .stain-grid { grid-template-columns: 1fr; }
+  .dashboard-grid { grid-template-columns: 1fr; }
+  .tc-controls { gap: 6px; }
+  .tc-btn { padding: 10px 16px; font-size: 0.85rem; }
+  .step-editor-item { flex-wrap: wrap; }
+  .step-editor-item .input-note { flex: 1 1 100%; }
+  .step-editor-header { display: none; }
+  .badge-btn { padding: 8px 14px; font-size: 0.8rem; }
+}
+</style>
+</head>
+<body>
+
+<div class="flash-overlay" id="flashOverlay"></div>
+<div class="toast" id="toast"></div>
+
+<!-- ===== Screen: Stain Selection ===== -->
+<div class="screen active" id="screenSelect">
+  <div class="header">
+    <div>
+      <h1>特殊染色タイマー</h1>
+      <div class="header-sub">Histological Special Stain Timer</div>
+    </div>
+    <div class="header-spacer"></div>
+    <button class="badge-btn hidden" id="btnGoDashboard">
+      実行中 <span class="badge-count" id="badgeCount">0</span>
+    </button>
+  </div>
+  <div class="select-body">
+    <div class="section-title">プリセット染色</div>
+    <div class="stain-grid" id="presetGrid"></div>
+    <div class="section-title">カスタム染色</div>
+    <div class="stain-grid" id="customGrid"></div>
+
+    <div class="io-section">
+      <div class="section-title">データ管理</div>
+      <div class="io-buttons">
+        <button class="io-btn io-btn-export" id="btnExportJSON" title="全ての染色設定をJSONファイルとして書き出し">&#128190; エクスポート (JSON)</button>
+        <button class="io-btn io-btn-import" id="btnImportJSON" title="JSONファイルから染色設定を読み込み">&#128194; インポート (JSON)</button>
+        <button class="io-btn io-btn-import" id="btnImportCSV" title="CSVファイルから染色を読み込み">&#128196; インポート (CSV)</button>
+        <button class="io-btn io-btn-import" id="btnImportXLSX" title="Excel(.xlsx)ファイルから染色を読み込み">&#128202; インポート (Excel)</button>
+      </div>
+      <input type="file" class="io-file-input" id="fileInputJSON" accept=".json">
+      <input type="file" class="io-file-input" id="fileInputCSV" accept=".csv,.tsv,.txt">
+      <input type="file" class="io-file-input" id="fileInputXLSX" accept=".xlsx,.xls">
+    </div>
+  </div>
+  <footer class="app-footer">
+    <span class="footer-warning">⚠ 参考用途のタイマーです</span>
+    最終確認は施設のSOPに従ってください
+    <br>
+    <a href="DISCLAIMER.md" target="_blank" rel="noopener">免責事項</a>
+    <span class="footer-sep">|</span>
+    <a href="https://github.com/H-Odashima-hub/special-stain-timer" target="_blank" rel="noopener">GitHub</a>
+    <span class="footer-sep">|</span>
+    MIT License
+  </footer>
+</div>
+
+<!-- ===== Screen: Dashboard ===== -->
+<div class="screen" id="screenDashboard">
+  <div class="header">
+    <button class="btn-back" id="btnDashBack" aria-label="戻る">&#8592;</button>
+    <div>
+      <h1>実行中のタイマー</h1>
+      <div class="header-sub" id="dashSubtitle"></div>
+    </div>
+    <div class="header-spacer"></div>
+    <button class="badge-btn" id="btnAddMore">＋ 追加</button>
+  </div>
+  <div class="dashboard-body">
+    <div id="dashboardContent"></div>
+  </div>
+</div>
+
+<!-- ===== Screen: Custom Stain Editor ===== -->
+<div class="screen" id="screenCustom">
+  <div class="header">
+    <button class="btn-back" id="btnCustomBack" aria-label="戻る">&#8592;</button>
+    <h1 id="customTitle">カスタム染色を追加</h1>
+  </div>
+  <div class="custom-body">
+    <div class="form-group">
+      <label class="form-label">染色名 *</label>
+      <input type="text" class="form-input" id="inputStainName" placeholder="例: ギムザ染色">
+    </div>
+    <div class="form-group">
+      <label class="form-label">英語名（任意）</label>
+      <input type="text" class="form-input" id="inputStainNameEn" placeholder="例: Giemsa stain">
+    </div>
+    <div class="form-group">
+      <label class="form-label">ステップ</label>
+      <div class="step-editor-header">
+        <span class="seh-num"></span>
+        <span class="seh-name">ステップ名</span>
+        <span class="seh-time">時間（分）</span>
+        <span class="seh-note">メモ</span>
+        <span class="seh-del"></span>
+      </div>
+      <div class="step-editor" id="stepEditor"></div>
+      <button class="btn-add-step" id="btnAddEditorStep">＋ ステップを追加</button>
+    </div>
+  </div>
+  <div class="form-actions">
+    <button class="btn btn-secondary" id="btnCustomCancel">キャンセル</button>
+    <button class="btn btn-primary" id="btnCustomSave">保存</button>
+  </div>
+</div>
+
+<script>
+// ===== Preset Stain Data =====
+const PRESETS = [
+  {
+    id: 'pas', name: 'PAS染色', nameEn: 'Periodic Acid-Schiff',
+    steps: [
+      { name: '過ヨウ素酸液', duration: 300, note: '0.5〜1% 過ヨウ素酸水溶液' },
+      { name: '水洗', duration: 60, note: '流水' },
+      { name: 'シッフ試薬', duration: 900, note: '遮光して反応' },
+      { name: '亜硫酸水（1回目）', duration: 120, note: '' },
+      { name: '亜硫酸水（2回目）', duration: 120, note: '' },
+      { name: '亜硫酸水（3回目）', duration: 120, note: '' },
+      { name: '水洗', duration: 300, note: '流水' },
+      { name: 'マイヤーヘマトキシリン（核染色）', duration: 300, note: '' },
+      { name: '流水（色出し）', duration: 600, note: '' }
+    ]
+  },
+  {
+    id: 'masson', name: 'マッソントリクローム染色', nameEn: "Masson's Trichrome",
+    steps: [
+      { name: 'マイヤーヘマトキシリン', duration: 600, note: '核染色' },
+      { name: '流水（色出し）', duration: 600, note: '' },
+      { name: 'ポンソーフクシン液', duration: 300, note: '' },
+      { name: '酢酸水', duration: 30, note: '1% 酢酸水に浸す' },
+      { name: 'リンタングステン酸液', duration: 300, note: '5% リンタングステン酸' },
+      { name: 'アニリンブルー液', duration: 300, note: '' },
+      { name: '酢酸水', duration: 60, note: '1% 酢酸水' }
+    ]
+  },
+  {
+    id: 'evg', name: 'EVG染色', nameEn: 'Elastica van Gieson',
+    steps: [
+      { name: 'レゾルシンフクシン液', duration: 1800, note: '弾性線維染色' },
+      { name: '水洗', duration: 60, note: '' },
+      { name: '分別（塩酸アルコール）', duration: 30, note: '鏡検で確認しながら' },
+      { name: '水洗', duration: 60, note: '' },
+      { name: 'ワンギーソン液', duration: 300, note: '膠原線維を染色' }
+    ]
+  },
+  {
+    id: 'pam', name: 'PAM染色', nameEn: 'Periodic Acid Methenamine Silver',
+    steps: [
+      { name: '過ヨウ素酸', duration: 1200, note: '1% 過ヨウ素酸水溶液' },
+      { name: '水洗', duration: 120, note: '' },
+      { name: 'メセナミン銀液', duration: 3600, note: '58〜60°C で反応、鏡検で確認' },
+      { name: '水洗', duration: 120, note: '' },
+      { name: '塩化金液', duration: 120, note: '0.1% 塩化金水溶液で調色' },
+      { name: 'チオ硫酸ナトリウム', duration: 120, note: '2% チオ硫酸ナトリウムで定着' },
+      { name: '水洗', duration: 120, note: '' }
+    ]
+  },
+  {
+    id: 'azan', name: 'アザン染色', nameEn: 'Azan stain',
+    steps: [
+      { name: 'アゾカルミンG液', duration: 3600, note: '56°C 温浴で反応' },
+      { name: 'アニリンアルコール', duration: 60, note: '分別、鏡検で確認' },
+      { name: '酢酸アルコール', duration: 60, note: '分別停止' },
+      { name: 'リンタングステン酸液', duration: 3600, note: '5% リンタングステン酸' },
+      { name: 'アニリンブルー・オレンジG液', duration: 3600, note: '' },
+      { name: '酢酸水', duration: 60, note: '1% 酢酸水' }
+    ]
+  },
+  {
+    id: 'congo', name: 'コンゴーレッド染色', nameEn: 'Congo Red',
+    steps: [
+      { name: 'コンゴーレッド液', duration: 1800, note: 'アミロイド染色' },
+      { name: '水洗', duration: 60, note: '' },
+      { name: 'マイヤーヘマトキシリン（核染色）', duration: 300, note: '' },
+      { name: '流水（色出し）', duration: 300, note: '' }
+    ]
+  },
+  {
+    id: 'berlin', name: 'ベルリンブルー染色', nameEn: 'Berlin Blue (Prussian Blue)',
+    steps: [
+      { name: 'フェロシアン化カリウム・塩酸液', duration: 1800, note: '鉄の検出' },
+      { name: '水洗', duration: 120, note: '' },
+      { name: 'ケルンエヒトロート（核染色）', duration: 300, note: '' },
+      { name: '水洗', duration: 120, note: '' }
+    ]
+  }
+];
+
+// ===== State =====
+let activeTimers = [];  // Array of timer instance objects
+let nextTimerId = 1;
+let audioCtx = null;
+let editingCustomId = null;
+let editingPresetId = null; // non-null when editing a preset
+let editorSteps = [];
+let returnToScreen = 'screenSelect';
+
+// ===== Utility =====
+function formatTime(seconds) {
+  if (seconds >= 3600) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function formatDuration(seconds) {
+  if (seconds >= 3600) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    return m > 0 ? `${h}時間${m}分` : `${h}時間`;
+  }
+  if (seconds >= 60) {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return s > 0 ? `${m}分${s}秒` : `${m}分`;
+  }
+  return `${seconds}秒`;
+}
+
+function totalTime(steps) {
+  return steps.reduce((sum, s) => sum + s.duration, 0);
+}
+
+function getCustomStains() {
+  try { return JSON.parse(localStorage.getItem('customStains') || '[]'); }
+  catch { return []; }
+}
+
+function saveCustomStains(stains) {
+  localStorage.setItem('customStains', JSON.stringify(stains));
+}
+
+function getPresetOverrides() {
+  try { return JSON.parse(localStorage.getItem('presetOverrides') || '{}'); }
+  catch { return {}; }
+}
+
+function savePresetOverrides(overrides) {
+  localStorage.setItem('presetOverrides', JSON.stringify(overrides));
+}
+
+function getEffectivePreset(presetId) {
+  const base = PRESETS.find(p => p.id === presetId);
+  if (!base) return null;
+  const overrides = getPresetOverrides();
+  return overrides[presetId] || base;
+}
+
+function isPresetEdited(presetId) {
+  return !!getPresetOverrides()[presetId];
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML.replace(/"/g, '&quot;');
+}
+
+// ===== Audio =====
+function getAudioContext() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function ensureAudio() {
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  if (!audioCtx) getAudioContext();
+}
+
+function playAlarm() {
+  try {
+    const ctx = getAudioContext();
+    const now = ctx.currentTime;
+    for (let i = 0; i < 3; i++) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'sine'; osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.3, now + i * 0.4);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.4 + 0.3);
+      osc.start(now + i * 0.4); osc.stop(now + i * 0.4 + 0.3);
+    }
+  } catch {}
+}
+
+function playCompletionSound() {
+  try {
+    const ctx = getAudioContext();
+    const now = ctx.currentTime;
+    [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'sine'; osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.25, now + i * 0.2);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.2 + 0.35);
+      osc.start(now + i * 0.2); osc.stop(now + i * 0.2 + 0.35);
+    });
+  } catch {}
+}
+
+function flashScreen() {
+  const el = document.getElementById('flashOverlay');
+  el.classList.remove('active');
+  void el.offsetWidth;
+  el.classList.add('active');
+  setTimeout(() => el.classList.remove('active'), 1600);
+}
+
+// ===== Screen Nav =====
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ===== Timer Instance Management =====
+function createTimerInstance(stain) {
+  const step = stain.steps[0];
+  return {
+    id: nextTimerId++,
+    stain: JSON.parse(JSON.stringify(stain)),
+    currentStepIndex: 0,
+    remainingSeconds: step.duration,
+    totalStepSeconds: step.duration,
+    isRunning: false,
+    intervalId: null,
+    completed: false,
+    expanded: false
+  };
+}
+
+function addStainTimer(stain) {
+  ensureAudio();
+  const timer = createTimerInstance(stain);
+  activeTimers.push(timer);
+  updateBadge();
+  renderDashboard();
+  showScreen('screenDashboard');
+}
+
+function removeTimer(timerId) {
+  const idx = activeTimers.findIndex(t => t.id === timerId);
+  if (idx < 0) return;
+  const timer = activeTimers[idx];
+  if (timer.intervalId) clearInterval(timer.intervalId);
+  activeTimers.splice(idx, 1);
+  updateBadge();
+  renderDashboard();
+  if (activeTimers.length === 0) showScreen('screenSelect');
+}
+
+function startTimerInstance(timer) {
+  if (timer.completed || timer.remainingSeconds <= 0) return;
+  timer.isRunning = true;
+  timer.intervalId = setInterval(() => {
+    timer.remainingSeconds--;
+    updateCardDisplay(timer);
+    if (timer.remainingSeconds <= 0) {
+      clearInterval(timer.intervalId);
+      timer.intervalId = null;
+      timer.isRunning = false;
+      onStepComplete(timer);
+    }
+  }, 1000);
+  updateCardDisplay(timer);
+}
+
+function pauseTimerInstance(timer) {
+  timer.isRunning = false;
+  if (timer.intervalId) { clearInterval(timer.intervalId); timer.intervalId = null; }
+  updateCardDisplay(timer);
+}
+
+function toggleTimerInstance(timer) {
+  ensureAudio();
+  if (timer.isRunning) pauseTimerInstance(timer);
+  else startTimerInstance(timer);
+}
+
+function skipStep(timer) {
+  pauseTimerInstance(timer);
+  advanceStep(timer);
+}
+
+function advanceStep(timer) {
+  if (timer.currentStepIndex < timer.stain.steps.length - 1) {
+    timer.currentStepIndex++;
+    const step = timer.stain.steps[timer.currentStepIndex];
+    timer.remainingSeconds = step.duration;
+    timer.totalStepSeconds = step.duration;
+    updateCardDisplay(timer);
+    renderCardSteps(timer);
+  } else {
+    timer.completed = true;
+    playCompletionSound();
+    renderCardContent(timer);
+    updateBadge();
+  }
+}
+
+function onStepComplete(timer) {
+  playAlarm();
+  flashScreen();
+  // Auto-advance after brief pause
+  setTimeout(() => {
+    if (!timer.completed) advanceStep(timer);
+  }, 2000);
+}
+
+// ===== Badge =====
+function updateBadge() {
+  const running = activeTimers.filter(t => !t.completed).length;
+  const btn = document.getElementById('btnGoDashboard');
+  const count = document.getElementById('badgeCount');
+  if (running > 0) {
+    btn.classList.remove('hidden');
+    count.textContent = running;
+  } else {
+    btn.classList.add('hidden');
+  }
+  document.getElementById('dashSubtitle').textContent =
+    `${activeTimers.length}件のタイマー`;
+}
+
+// ===== Render: Select Screen =====
+function renderSelectScreen() {
+  renderPresetGrid();
+  renderCustomGrid();
+}
+
+function renderPresetGrid() {
+  const presetGrid = document.getElementById('presetGrid');
+  presetGrid.innerHTML = PRESETS.map(basePreset => {
+    const stain = getEffectivePreset(basePreset.id);
+    const edited = isPresetEdited(basePreset.id);
+    return `
+      <div class="stain-card" data-id="${basePreset.id}" data-type="preset">
+        <div class="stain-name">
+          ${stain.name}${edited ? '<span class="edited-badge">編集済</span>' : ''}
+        </div>
+        <div class="stain-name-en">${stain.nameEn}</div>
+        <div class="stain-meta">
+          <span>${stain.steps.length} ステップ</span>
+          <span>合計 ${formatDuration(totalTime(stain.steps))}</span>
+        </div>
+        <div class="preset-actions">
+          <button class="btn-edit-preset" data-id="${basePreset.id}">編集</button>
+          ${edited ? `<button class="btn-reset-preset" data-id="${basePreset.id}">初期値に戻す</button>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  presetGrid.querySelectorAll('.stain-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.preset-actions')) return;
+      const stain = getEffectivePreset(card.dataset.id);
+      if (stain) addStainTimer(stain);
+    });
+  });
+
+  presetGrid.querySelectorAll('.btn-edit-preset').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      returnToScreen = 'screenSelect';
+      openPresetEditor(btn.dataset.id);
+    });
+  });
+
+  presetGrid.querySelectorAll('.btn-reset-preset').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const base = PRESETS.find(p => p.id === btn.dataset.id);
+      if (!base) return;
+      if (confirm(`「${base.name}」を初期プロトコルに戻しますか？`)) {
+        const overrides = getPresetOverrides();
+        delete overrides[btn.dataset.id];
+        savePresetOverrides(overrides);
+        renderPresetGrid();
+      }
+    });
+  });
+}
+
+function renderCustomGrid() {
+  const customGrid = document.getElementById('customGrid');
+  const customs = getCustomStains();
+
+  let html = customs.map(stain => `
+    <div class="stain-card custom-card" data-id="${stain.id}">
+      <div class="stain-name">${stain.name}</div>
+      ${stain.nameEn ? `<div class="stain-name-en">${stain.nameEn}</div>` : ''}
+      <div class="stain-meta">
+        <span>${stain.steps.length} ステップ</span>
+        <span>合計 ${formatDuration(totalTime(stain.steps))}</span>
+      </div>
+      <div class="custom-actions">
+        <button class="btn-edit-custom" data-id="${stain.id}">編集</button>
+        <button class="btn-delete-custom" data-id="${stain.id}">削除</button>
+      </div>
+    </div>
+  `).join('');
+
+  html += `<div class="btn-add-custom" id="btnAddCustom">＋ カスタム染色を追加</div>`;
+  customGrid.innerHTML = html;
+
+  customGrid.querySelectorAll('.stain-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.custom-actions')) return;
+      const stain = customs.find(s => s.id === card.dataset.id);
+      if (stain) addStainTimer(stain);
+    });
+  });
+
+  customGrid.querySelectorAll('.btn-edit-custom').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      returnToScreen = 'screenSelect';
+      openCustomEditor(btn.dataset.id);
+    });
+  });
+
+  customGrid.querySelectorAll('.btn-delete-custom').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (confirm('この染色を削除しますか？')) {
+        const c = getCustomStains().filter(s => s.id !== btn.dataset.id);
+        saveCustomStains(c);
+        renderCustomGrid();
+      }
+    });
+  });
+
+  document.getElementById('btnAddCustom').addEventListener('click', () => {
+    returnToScreen = 'screenSelect';
+    openCustomEditor(null);
+  });
+}
+
+// ===== Render: Dashboard =====
+function renderDashboard() {
+  const container = document.getElementById('dashboardContent');
+
+  if (activeTimers.length === 0) {
+    container.innerHTML = `
+      <div class="dashboard-empty">
+        <p>実行中のタイマーはありません</p>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = `<div class="dashboard-grid" id="dashboardGrid"></div>`;
+  const grid = document.getElementById('dashboardGrid');
+
+  activeTimers.forEach(timer => {
+    const card = document.createElement('div');
+    card.className = 'timer-card';
+    card.id = `card-${timer.id}`;
+    card.innerHTML = buildCardHTML(timer);
+    grid.appendChild(card);
+    attachCardEvents(timer, card);
+  });
+
+  updateBadge();
+}
+
+function buildCardHTML(timer) {
+  const stain = timer.stain;
+
+  if (timer.completed) {
+    return `
+      <div class="tc-header">
+        <div class="tc-header-info">
+          <div class="tc-header-name">${stain.name}</div>
+          ${stain.nameEn ? `<div class="tc-header-en">${stain.nameEn}</div>` : ''}
+        </div>
+        <button class="tc-close" data-timer="${timer.id}">✕</button>
+      </div>
+      <div class="tc-completed">
+        <div class="tc-completed-icon">&#10003;</div>
+        <div class="tc-completed-text">全ステップ完了</div>
+      </div>`;
+  }
+
+  const step = stain.steps[timer.currentStepIndex];
+  const pct = timer.totalStepSeconds > 0
+    ? ((timer.totalStepSeconds - timer.remainingSeconds) / timer.totalStepSeconds) * 100 : 0;
+
+  let timerCls = 'tc-timer';
+  if (timer.isRunning && timer.remainingSeconds <= 10) timerCls += ' danger';
+  else if (timer.isRunning && timer.remainingSeconds <= 30) timerCls += ' warning';
+
+  const btnLabel = timer.isRunning ? '一時停止' : (timer.remainingSeconds < timer.totalStepSeconds ? '再開' : '開始');
+
+  const stepsHTML = stain.steps.map((s, i) => {
+    let cls = 'step-item';
+    if (i === timer.currentStepIndex) cls += ' active';
+    else if (i < timer.currentStepIndex) cls += ' completed';
+    return `<div class="${cls}">
+      <div class="step-number">${i < timer.currentStepIndex ? '✓' : i + 1}</div>
+      <div class="step-name">${s.name}</div>
+      <div class="step-duration">${formatDuration(s.duration)}</div>
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="tc-header">
+      <div class="tc-header-info">
+        <div class="tc-header-name">${stain.name}</div>
+        ${stain.nameEn ? `<div class="tc-header-en">${stain.nameEn}</div>` : ''}
+      </div>
+      <button class="tc-close" data-timer="${timer.id}">✕</button>
+    </div>
+    <div class="tc-body" data-timer="${timer.id}">
+      <div class="tc-step-label">ステップ ${timer.currentStepIndex + 1} / ${stain.steps.length}</div>
+      <div class="tc-step-name">${step.name}</div>
+      <div class="tc-step-note">${step.note || ''}</div>
+      <div class="${timerCls}" data-timer-display="${timer.id}">${formatTime(timer.remainingSeconds)}</div>
+      <div class="tc-progress">
+        <div class="tc-progress-bar" data-timer-progress="${timer.id}" style="width:${pct}%"></div>
+      </div>
+      <div class="tc-controls">
+        <button class="tc-btn tc-btn-primary" data-action="toggle" data-timer="${timer.id}">${btnLabel}</button>
+        <button class="tc-btn tc-btn-secondary tc-btn-icon" data-action="skip" data-timer="${timer.id}" title="スキップ">&#9197;</button>
+      </div>
+    </div>
+    <button class="tc-toggle" data-action="expand" data-timer="${timer.id}">
+      <span>全ステップ</span>
+      <span class="tc-toggle-arrow ${timer.expanded ? 'open' : ''}" data-timer-arrow="${timer.id}">&#9660;</span>
+    </button>
+    <div class="tc-steps ${timer.expanded ? 'expanded' : ''}" data-timer-steps="${timer.id}">
+      <div class="tc-steps-inner">${stepsHTML}</div>
+    </div>`;
+}
+
+function attachCardEvents(timer, card) {
+  card.querySelectorAll('[data-action]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const action = el.dataset.action;
+      if (action === 'toggle') toggleTimerInstance(timer);
+      else if (action === 'skip') skipStep(timer);
+      else if (action === 'expand') {
+        timer.expanded = !timer.expanded;
+        const steps = card.querySelector(`[data-timer-steps="${timer.id}"]`);
+        const arrow = card.querySelector(`[data-timer-arrow="${timer.id}"]`);
+        if (steps) steps.classList.toggle('expanded', timer.expanded);
+        if (arrow) arrow.classList.toggle('open', timer.expanded);
+      }
+    });
+  });
+
+  card.querySelectorAll('.tc-close').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!timer.completed && timer.isRunning) {
+        if (!confirm(`${timer.stain.name}のタイマーを停止して閉じますか？`)) return;
+      }
+      removeTimer(timer.id);
+    });
+  });
+}
+
+// Update just the display parts of a card without full re-render
+function updateCardDisplay(timer) {
+  const card = document.getElementById(`card-${timer.id}`);
+  if (!card) return;
+
+  // Update timer text
+  const display = card.querySelector(`[data-timer-display="${timer.id}"]`);
+  if (display) {
+    display.textContent = formatTime(timer.remainingSeconds);
+    display.className = 'tc-timer';
+    if (timer.isRunning && timer.remainingSeconds <= 10) display.classList.add('danger');
+    else if (timer.isRunning && timer.remainingSeconds <= 30) display.classList.add('warning');
+  }
+
+  // Update progress bar
+  const pct = timer.totalStepSeconds > 0
+    ? ((timer.totalStepSeconds - timer.remainingSeconds) / timer.totalStepSeconds) * 100 : 0;
+  const prog = card.querySelector(`[data-timer-progress="${timer.id}"]`);
+  if (prog) prog.style.width = pct + '%';
+
+  // Update button label
+  const btn = card.querySelector(`[data-action="toggle"][data-timer="${timer.id}"]`);
+  if (btn) {
+    btn.textContent = timer.isRunning ? '一時停止' : (timer.remainingSeconds < timer.totalStepSeconds ? '再開' : '開始');
+  }
+
+  // Update card border
+  card.className = 'timer-card';
+  if (timer.isRunning) card.classList.add('running');
+  if (timer.completed) card.classList.add('all-done');
+}
+
+function renderCardContent(timer) {
+  const card = document.getElementById(`card-${timer.id}`);
+  if (!card) return;
+  card.innerHTML = buildCardHTML(timer);
+  attachCardEvents(timer, card);
+}
+
+function renderCardSteps(timer) {
+  // Re-render step list and step label
+  renderCardContent(timer);
+}
+
+// ===== Custom / Preset Editor =====
+function openCustomEditor(customId) {
+  editingCustomId = customId;
+  editingPresetId = null;
+  if (customId) {
+    const stain = getCustomStains().find(s => s.id === customId);
+    if (!stain) return;
+    document.getElementById('customTitle').textContent = 'カスタム染色を編集';
+    document.getElementById('inputStainName').value = stain.name;
+    document.getElementById('inputStainNameEn').value = stain.nameEn || '';
+    editorSteps = stain.steps.map(s => ({ ...s }));
+  } else {
+    document.getElementById('customTitle').textContent = 'カスタム染色を追加';
+    document.getElementById('inputStainName').value = '';
+    document.getElementById('inputStainNameEn').value = '';
+    editorSteps = [{ name: '', duration: 60, note: '' }];
+  }
+  renderEditorSteps();
+  showScreen('screenCustom');
+}
+
+function openPresetEditor(presetId) {
+  editingPresetId = presetId;
+  editingCustomId = null;
+  const stain = getEffectivePreset(presetId);
+  if (!stain) return;
+  document.getElementById('customTitle').textContent = 'プリセット染色を編集';
+  document.getElementById('inputStainName').value = stain.name;
+  document.getElementById('inputStainNameEn').value = stain.nameEn || '';
+  editorSteps = stain.steps.map(s => ({ ...s }));
+  renderEditorSteps();
+  showScreen('screenCustom');
+}
+
+function renderEditorSteps() {
+  const container = document.getElementById('stepEditor');
+  container.innerHTML = editorSteps.map((step, i) => `
+    <div class="step-editor-item" data-index="${i}">
+      <span class="step-num">${i + 1}</span>
+      <input type="text" class="form-input" placeholder="ステップ名" value="${escapeHtml(step.name)}" data-field="name">
+      <input type="text" class="form-input input-time" placeholder="分:秒" value="${formatTimeInput(step.duration)}" data-field="duration" inputmode="numeric">
+      <input type="text" class="form-input input-note" placeholder="メモ（任意）" value="${escapeHtml(step.note || '')}" data-field="note">
+      <button class="btn-remove-step" data-index="${i}" ${editorSteps.length <= 1 ? 'disabled' : ''}>✕</button>
+    </div>
+  `).join('');
+
+  container.querySelectorAll('input').forEach(input => {
+    input.addEventListener('change', () => {
+      const idx = parseInt(input.closest('.step-editor-item').dataset.index);
+      const field = input.dataset.field;
+      if (field === 'duration') {
+        editorSteps[idx].duration = parseTimeInput(input.value);
+        input.value = formatTimeInput(editorSteps[idx].duration);
+      } else {
+        editorSteps[idx][field] = input.value;
+      }
+    });
+  });
+
+  container.querySelectorAll('.btn-remove-step').forEach(btn => {
+    btn.addEventListener('click', () => {
+      editorSteps.splice(parseInt(btn.dataset.index), 1);
+      renderEditorSteps();
+    });
+  });
+}
+
+function formatTimeInput(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return s === 0 ? `${m}` : `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function parseTimeInput(value) {
+  value = value.trim().replace(/[：]/g, ':');
+  if (value.includes(':')) {
+    const parts = value.split(':');
+    return Math.max(1, (parseInt(parts[0]) || 0) * 60 + (parseInt(parts[1]) || 0));
+  }
+  const num = parseInt(value) || 0;
+  return num > 0 ? Math.max(1, num * 60) : 60;
+}
+
+function saveCustomStain() {
+  document.querySelectorAll('#stepEditor .step-editor-item').forEach((item, i) => {
+    editorSteps[i].name = item.querySelector('[data-field="name"]').value;
+    editorSteps[i].duration = parseTimeInput(item.querySelector('[data-field="duration"]').value);
+    editorSteps[i].note = item.querySelector('[data-field="note"]').value;
+  });
+
+  const name = document.getElementById('inputStainName').value.trim();
+  if (!name) { alert('染色名を入力してください'); return; }
+
+  const validSteps = editorSteps.filter(s => s.name.trim());
+  if (validSteps.length === 0) { alert('少なくとも1つのステップを入力してください'); return; }
+
+  const cleanSteps = validSteps.map(s => ({
+    name: s.name.trim(), duration: s.duration, note: (s.note || '').trim()
+  }));
+
+  if (editingPresetId) {
+    // Save as preset override
+    const overrides = getPresetOverrides();
+    overrides[editingPresetId] = {
+      id: editingPresetId,
+      name,
+      nameEn: document.getElementById('inputStainNameEn').value.trim(),
+      steps: cleanSteps
+    };
+    savePresetOverrides(overrides);
+    renderPresetGrid();
+  } else {
+    const customs = getCustomStains();
+    const stainData = {
+      id: editingCustomId || 'custom_' + Date.now(),
+      name,
+      nameEn: document.getElementById('inputStainNameEn').value.trim(),
+      steps: cleanSteps
+    };
+    if (editingCustomId) {
+      const idx = customs.findIndex(s => s.id === editingCustomId);
+      if (idx >= 0) customs[idx] = stainData;
+    } else {
+      customs.push(stainData);
+    }
+    saveCustomStains(customs);
+    renderCustomGrid();
+  }
+
+  showScreen(returnToScreen);
+}
+
+// ===== Event Listeners =====
+document.getElementById('btnGoDashboard').addEventListener('click', () => {
+  renderDashboard();
+  showScreen('screenDashboard');
+});
+
+document.getElementById('btnDashBack').addEventListener('click', () => {
+  showScreen('screenSelect');
+});
+
+document.getElementById('btnAddMore').addEventListener('click', () => {
+  showScreen('screenSelect');
+});
+
+document.getElementById('btnCustomBack').addEventListener('click', () => {
+  showScreen(returnToScreen);
+});
+
+document.getElementById('btnAddEditorStep').addEventListener('click', () => {
+  editorSteps.push({ name: '', duration: 60, note: '' });
+  renderEditorSteps();
+});
+
+document.getElementById('btnCustomSave').addEventListener('click', saveCustomStain);
+document.getElementById('btnCustomCancel').addEventListener('click', () => {
+  showScreen(returnToScreen);
+});
+
+// ===== Toast =====
+let toastTimer = null;
+function showToast(msg, isError) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (isError ? ' error' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = 'toast'; }, 3500);
+}
+
+// ===== Export =====
+function exportJSON() {
+  const data = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    customStains: getCustomStains(),
+    presetOverrides: getPresetOverrides()
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `stain-timer-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('エクスポートしました');
+}
+
+// ===== Import: JSON =====
+function importJSON(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+
+      // Support both full backup format and simple array of stains
+      let imported = [];
+      let overrides = null;
+
+      if (data.version && data.customStains) {
+        imported = data.customStains;
+        overrides = data.presetOverrides || null;
+      } else if (Array.isArray(data)) {
+        imported = data;
+      } else if (data.name && data.steps) {
+        imported = [data];
+      } else {
+        showToast('認識できないJSON形式です', true);
+        return;
+      }
+
+      // Validate & assign IDs
+      const valid = imported.filter(s => s.name && Array.isArray(s.steps) && s.steps.length > 0);
+      if (valid.length === 0 && !overrides) {
+        showToast('インポートできる染色データがありません', true);
+        return;
+      }
+
+      // Merge with existing
+      const existing = getCustomStains();
+      const existingIds = new Set(existing.map(s => s.id));
+      let addedCount = 0;
+      valid.forEach(s => {
+        if (!s.id) s.id = 'custom_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+        if (existingIds.has(s.id)) {
+          s.id = 'custom_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+        }
+        // Ensure steps have required fields
+        s.steps = s.steps.map(st => ({
+          name: st.name || '(無名)',
+          duration: parseInt(st.duration) || 60,
+          note: st.note || ''
+        }));
+        existing.push(s);
+        addedCount++;
+      });
+      saveCustomStains(existing);
+
+      // Restore preset overrides if present
+      if (overrides && typeof overrides === 'object') {
+        const currentOverrides = getPresetOverrides();
+        Object.assign(currentOverrides, overrides);
+        savePresetOverrides(currentOverrides);
+        renderPresetGrid();
+      }
+
+      renderCustomGrid();
+      showToast(`${addedCount}件の染色をインポートしました` + (overrides ? '（プリセット編集も復元）' : ''));
+    } catch (err) {
+      showToast('JSONの読み込みに失敗しました: ' + err.message, true);
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ===== Import: CSV =====
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"' && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        current += ch;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ',' || ch === '\t') {
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
+function importCSV(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const text = e.target.result;
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      if (lines.length < 2) {
+        showToast('CSVにデータ行がありません', true);
+        return;
+      }
+
+      const stains = parseCSVToStains(lines);
+      if (stains.length === 0) {
+        showToast('インポートできる染色データがありません', true);
+        return;
+      }
+
+      const existing = getCustomStains();
+      stains.forEach(s => existing.push(s));
+      saveCustomStains(existing);
+      renderCustomGrid();
+      showToast(`${stains.length}件の染色をインポートしました`);
+    } catch (err) {
+      showToast('CSVの読み込みに失敗しました: ' + err.message, true);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function parseCSVToStains(lines) {
+  const header = parseCSVLine(lines[0]).map(h => h.toLowerCase().replace(/\s+/g, ''));
+  // Detect column mapping
+  const colMap = detectColumns(header);
+  if (!colMap.stepName) {
+    showToast('ヘッダーに「ステップ名」列が見つかりません。\n列名: 染色名, ステップ名, 時間(分), メモ', true);
+    return [];
+  }
+
+  const stainMap = new Map(); // group by stain name
+  for (let i = 1; i < lines.length; i++) {
+    const cols = parseCSVLine(lines[i]);
+    if (cols.length <= 1 && !cols[0]) continue;
+
+    const stainName = colMap.stainName != null ? (cols[colMap.stainName] || '').trim() : '';
+    const stepName = (cols[colMap.stepName] || '').trim();
+    if (!stepName) continue;
+
+    const duration = parseDurationValue(cols[colMap.duration] || '1');
+    const note = colMap.note != null ? (cols[colMap.note] || '').trim() : '';
+    const nameEn = colMap.nameEn != null ? (cols[colMap.nameEn] || '').trim() : '';
+
+    const key = stainName || '_default';
+    if (!stainMap.has(key)) {
+      stainMap.set(key, { name: stainName || 'インポート染色', nameEn, steps: [] });
+    }
+    stainMap.get(key).steps.push({ name: stepName, duration, note });
+  }
+
+  return Array.from(stainMap.values()).map(s => ({
+    id: 'custom_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+    name: s.name,
+    nameEn: s.nameEn,
+    steps: s.steps
+  }));
+}
+
+function detectColumns(header) {
+  const map = { stainName: null, stepName: null, duration: null, note: null, nameEn: null };
+  const patterns = {
+    stainName: ['染色名', '染色', 'stainname', 'stain', 'name'],
+    stepName: ['ステップ名', 'ステップ', 'step', 'stepname', '工程', '手順'],
+    duration: ['時間', '分', 'duration', 'time', 'minutes', 'min', '秒数', '時間(分)', '時間（分）'],
+    note: ['メモ', 'memo', 'note', 'notes', '備考', '注記', 'comment'],
+    nameEn: ['英語名', 'english', 'nameen', 'englishname', '英名']
+  };
+
+  header.forEach((h, i) => {
+    for (const [field, keywords] of Object.entries(patterns)) {
+      if (map[field] == null && keywords.some(k => h.includes(k))) {
+        map[field] = i;
+      }
+    }
+  });
+
+  // Fallback: if no stainName column, try to use first column if stepName isn't first
+  if (map.stepName == null && header.length >= 2) {
+    // Assume: col0=stainName, col1=stepName, col2=duration, col3=note
+    map.stainName = 0;
+    map.stepName = 1;
+    map.duration = header.length > 2 ? 2 : null;
+    map.note = header.length > 3 ? 3 : null;
+  } else if (map.stepName != null && map.duration == null) {
+    // Try next column as duration
+    const nextIdx = map.stepName + 1;
+    if (nextIdx < header.length) map.duration = nextIdx;
+  }
+
+  return map;
+}
+
+function parseDurationValue(val) {
+  val = String(val).trim().replace(/[：]/g, ':');
+  if (val.includes(':')) {
+    const parts = val.split(':');
+    return Math.max(1, (parseInt(parts[0]) || 0) * 60 + (parseInt(parts[1]) || 0));
+  }
+  const num = parseFloat(val) || 0;
+  if (num <= 0) return 60;
+  // If number has decimal or is small, treat as minutes
+  return Math.max(1, Math.round(num * 60));
+}
+
+// ===== Import: Excel (XLSX) =====
+let xlsxLoaded = false;
+
+function loadSheetJS() {
+  return new Promise((resolve, reject) => {
+    if (xlsxLoaded && window.XLSX) { resolve(); return; }
+    const script = document.createElement('script');
+    script.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+    script.onload = () => { xlsxLoaded = true; resolve(); };
+    script.onerror = () => reject(new Error('SheetJSライブラリの読み込みに失敗しました。インターネット接続を確認してください。'));
+    document.head.appendChild(script);
+  });
+}
+
+async function importXLSX(file) {
+  try {
+    showToast('Excelライブラリを読み込み中...');
+    await loadSheetJS();
+
+    const data = await file.arrayBuffer();
+    const workbook = XLSX.read(data, { type: 'array' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+    if (rows.length < 2) {
+      showToast('Excelにデータ行がありません', true);
+      return;
+    }
+
+    const lines = rows.map(row => row.map(cell => String(cell)));
+    const stains = parseCSVToStains(lines.map(row => row.join(',')));
+
+    // Re-parse properly using the parsed rows directly
+    const header = lines[0].map(h => h.toLowerCase().replace(/\s+/g, ''));
+    const colMap = detectColumns(header);
+    if (!colMap.stepName) {
+      showToast('ヘッダーに「ステップ名」列が見つかりません', true);
+      return;
+    }
+
+    const stainMap = new Map();
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i];
+      if (cols.length <= 1 && !cols[0]) continue;
+
+      const stainName = colMap.stainName != null ? (cols[colMap.stainName] || '').trim() : '';
+      const stepName = (cols[colMap.stepName] || '').trim();
+      if (!stepName) continue;
+
+      const duration = parseDurationValue(cols[colMap.duration] || '1');
+      const note = colMap.note != null ? (cols[colMap.note] || '').trim() : '';
+      const nameEn = colMap.nameEn != null ? (cols[colMap.nameEn] || '').trim() : '';
+
+      const key = stainName || '_default';
+      if (!stainMap.has(key)) {
+        stainMap.set(key, { name: stainName || 'インポート染色', nameEn, steps: [] });
+      }
+      stainMap.get(key).steps.push({ name: stepName, duration, note });
+    }
+
+    const importedStains = Array.from(stainMap.values()).map(s => ({
+      id: 'custom_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      name: s.name, nameEn: s.nameEn, steps: s.steps
+    }));
+
+    if (importedStains.length === 0) {
+      showToast('インポートできる染色データがありません', true);
+      return;
+    }
+
+    const existing = getCustomStains();
+    importedStains.forEach(s => existing.push(s));
+    saveCustomStains(existing);
+    renderCustomGrid();
+    showToast(`${importedStains.length}件の染色をインポートしました`);
+  } catch (err) {
+    showToast('Excelの読み込みに失敗しました: ' + err.message, true);
+  }
+}
+
+// ===== Import/Export Event Listeners =====
+document.getElementById('btnExportJSON').addEventListener('click', exportJSON);
+
+document.getElementById('btnImportJSON').addEventListener('click', () => {
+  document.getElementById('fileInputJSON').click();
+});
+document.getElementById('fileInputJSON').addEventListener('change', (e) => {
+  if (e.target.files[0]) { importJSON(e.target.files[0]); e.target.value = ''; }
+});
+
+document.getElementById('btnImportCSV').addEventListener('click', () => {
+  document.getElementById('fileInputCSV').click();
+});
+document.getElementById('fileInputCSV').addEventListener('change', (e) => {
+  if (e.target.files[0]) { importCSV(e.target.files[0]); e.target.value = ''; }
+});
+
+document.getElementById('btnImportXLSX').addEventListener('click', () => {
+  document.getElementById('fileInputXLSX').click();
+});
+document.getElementById('fileInputXLSX').addEventListener('change', (e) => {
+  if (e.target.files[0]) { importXLSX(e.target.files[0]); e.target.value = ''; }
+});
+
+// ===== Init =====
+renderSelectScreen();
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js');
+}
+</script>
+</body>
+</html>
