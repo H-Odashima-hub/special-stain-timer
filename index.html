@@ -521,26 +521,37 @@ input.io-file-input { display: none; }
 }
 .btn-remove-step:hover { background: #fecaca; }
 
-.step-move-btns {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+/* Drag handle */
+.drag-handle {
   flex-shrink: 0;
-}
-.btn-move-step {
-  background: var(--gray-100);
-  border: none;
-  color: var(--gray-500);
-  width: 30px; height: 17px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.6rem;
+  width: 22px;
   display: flex; align-items: center; justify-content: center;
-  padding: 0;
-  line-height: 1;
+  cursor: grab;
+  color: var(--gray-300);
+  touch-action: none;
+  border-radius: 4px;
+  padding: 2px;
+  align-self: stretch;
 }
-.btn-move-step:hover:not(:disabled) { background: var(--primary-light); color: var(--primary); }
-.btn-move-step:disabled { opacity: 0.2; cursor: default; }
+.drag-handle:hover { color: var(--gray-500); background: var(--gray-100); }
+.drag-handle:active { cursor: grabbing; }
+.drag-handle::before {
+  content: '';
+  display: block;
+  width: 6px; height: 18px;
+  background-image: radial-gradient(circle, currentColor 1.3px, transparent 1.3px);
+  background-size: 3px 3px;
+}
+.seh-drag { width: 22px; flex-shrink: 0; }
+
+/* Drag-and-drop states */
+.step-editor-item.dnd-dragging {
+  opacity: 0.25;
+  outline: 2px dashed var(--primary);
+  outline-offset: 2px;
+}
+.step-editor-item.dnd-over-top    { border-top: 3px solid var(--primary); }
+.step-editor-item.dnd-over-bottom { border-bottom: 3px solid var(--primary); }
 
 .step-editor-header {
   display: flex; gap: 8px; align-items: center;
@@ -691,6 +702,7 @@ input.io-file-input { display: none; }
     <div class="form-group">
       <label class="form-label">ステップ</label>
       <div class="step-editor-header">
+        <span class="seh-drag"></span>
         <span class="seh-num"></span>
         <span class="seh-name">ステップ名</span>
         <span class="seh-time">時間（分）</span>
@@ -1469,14 +1481,11 @@ function renderEditorSteps() {
   const container = document.getElementById('stepEditor');
   container.innerHTML = editorSteps.map((step, i) => `
     <div class="step-editor-item" data-index="${i}">
+      <span class="drag-handle" title="ドラッグして並び替え"></span>
       <span class="step-num">${i + 1}</span>
       <input type="text" class="form-input" placeholder="ステップ名" value="${escapeHtml(step.name)}" data-field="name">
       <input type="text" class="form-input input-time" placeholder="分:秒" value="${formatTimeInput(step.duration)}" data-field="duration" inputmode="numeric">
       <input type="text" class="form-input input-note" placeholder="メモ（任意）" value="${escapeHtml(step.note || '')}" data-field="note">
-      <div class="step-move-btns">
-        <button class="btn-move-step" data-action="up"   data-index="${i}" ${i === 0 ? 'disabled' : ''}>▲</button>
-        <button class="btn-move-step" data-action="down" data-index="${i}" ${i === editorSteps.length - 1 ? 'disabled' : ''}>▼</button>
-      </div>
       <button class="btn-remove-step" data-index="${i}" ${editorSteps.length <= 1 ? 'disabled' : ''}>✕</button>
     </div>
   `).join('');
@@ -1491,19 +1500,6 @@ function renderEditorSteps() {
       } else {
         editorSteps[idx][field] = input.value;
       }
-    });
-  });
-
-  container.querySelectorAll('.btn-move-step').forEach(btn => {
-    btn.addEventListener('click', () => {
-      syncEditorInputs();
-      const idx = parseInt(btn.dataset.index);
-      if (btn.dataset.action === 'up' && idx > 0) {
-        [editorSteps[idx - 1], editorSteps[idx]] = [editorSteps[idx], editorSteps[idx - 1]];
-      } else if (btn.dataset.action === 'down' && idx < editorSteps.length - 1) {
-        [editorSteps[idx], editorSteps[idx + 1]] = [editorSteps[idx + 1], editorSteps[idx]];
-      }
-      renderEditorSteps();
     });
   });
 
@@ -1575,6 +1571,106 @@ function saveCustomStain() {
   }
 
   showScreen(returnToScreen);
+}
+
+// ===== Step Editor Drag-and-Drop =====
+let dndState = null;
+
+function initStepEditorDnD() {
+  const container = document.getElementById('stepEditor');
+
+  container.addEventListener('pointerdown', e => {
+    if (!e.target.closest('.drag-handle')) return;
+    e.preventDefault();
+
+    const item = e.target.closest('.step-editor-item');
+    if (!item) return;
+
+    const rect = item.getBoundingClientRect();
+
+    // Ghost: a styled clone that follows the pointer
+    const ghost = item.cloneNode(true);
+    ghost.querySelectorAll('input, button').forEach(el => { el.tabIndex = -1; });
+    Object.assign(ghost.style, {
+      position: 'fixed',
+      zIndex: '9999',
+      pointerEvents: 'none',
+      opacity: '0.92',
+      width: rect.width + 'px',
+      left: rect.left + 'px',
+      top:  rect.top  + 'px',
+      margin: '0',
+      boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+      transform: 'rotate(1.5deg) scale(1.02)',
+      transition: 'none',
+    });
+    document.body.appendChild(ghost);
+    item.classList.add('dnd-dragging');
+
+    dndState = {
+      sourceIndex: parseInt(item.dataset.index),
+      item,
+      ghost,
+      offsetY: e.clientY - rect.top,
+      overIndex: parseInt(item.dataset.index),
+      insertAfter: false,
+    };
+
+    function clearOverClasses() {
+      container.querySelectorAll('.dnd-over-top, .dnd-over-bottom')
+        .forEach(el => el.classList.remove('dnd-over-top', 'dnd-over-bottom'));
+    }
+
+    function onMove(e) {
+      if (!dndState) return;
+      // Move ghost
+      ghost.style.top = (e.clientY - dndState.offsetY) + 'px';
+
+      // Find element under cursor (temporarily hide ghost)
+      ghost.style.visibility = 'hidden';
+      const elUnder = document.elementFromPoint(e.clientX, e.clientY);
+      ghost.style.visibility = '';
+
+      clearOverClasses();
+      const overItem = elUnder?.closest('.step-editor-item');
+      if (overItem && overItem !== item) {
+        const ovRect = overItem.getBoundingClientRect();
+        const isTop = e.clientY < ovRect.top + ovRect.height / 2;
+        overItem.classList.add(isTop ? 'dnd-over-top' : 'dnd-over-bottom');
+        dndState.overIndex  = parseInt(overItem.dataset.index);
+        dndState.insertAfter = !isTop;
+      }
+    }
+
+    function onUp() {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup',   onUp);
+      document.removeEventListener('pointercancel', onUp);
+
+      ghost.remove();
+      item.classList.remove('dnd-dragging');
+      clearOverClasses();
+
+      const { sourceIndex, overIndex, insertAfter } = dndState;
+      dndState = null;
+
+      if (sourceIndex !== overIndex) {
+        syncEditorInputs();
+        const [moved] = editorSteps.splice(sourceIndex, 1);
+        // Recalculate insertion index after removal
+        let insertAt = overIndex;
+        if (insertAfter) insertAt++;
+        if (sourceIndex < overIndex) insertAt--;   // shift left after removal
+        insertAt = Math.max(0, Math.min(insertAt, editorSteps.length));
+        editorSteps.splice(insertAt, 0, moved);
+        renderEditorSteps();
+      }
+    }
+
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup',   onUp);
+    document.addEventListener('pointercancel', onUp);
+  });
 }
 
 // ===== Event Listeners =====
@@ -1962,6 +2058,7 @@ document.getElementById('btnNotifToggle').addEventListener('click', async () => 
 // ===== Init =====
 renderSelectScreen();
 updateNotifBtn();
+initStepEditorDnD();
 </script>
 <script>
 if ('serviceWorker' in navigator) {
