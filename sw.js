@@ -1,4 +1,4 @@
-const CACHE_NAME = 'stain-timer-v2';
+const CACHE_NAME = 'stain-timer-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -28,6 +28,17 @@ self.addEventListener('activate', (event) => {
     )
   );
   self.clients.claim();
+});
+
+// Notification click: bring app to foreground
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      if (list.length) return list[0].focus();
+      return clients.openWindow('./');
+    })
+  );
 });
 
 // Fetch: cache-first for same-origin, network-only for CDN (SheetJS etc.)

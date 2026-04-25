@@ -480,6 +480,24 @@ input.io-file-input { display: none; }
 .btn-secondary { background: var(--gray-200); color: var(--gray-700); }
 .btn-secondary:hover { background: var(--gray-300); }
 
+/* ===== Notification button ===== */
+.notif-btn {
+  background: none;
+  border: 2px solid var(--gray-200);
+  border-radius: 10px;
+  width: 42px; height: 42px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.25rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+  color: var(--gray-400);
+}
+.notif-btn:hover { border-color: var(--primary); background: var(--primary-light); }
+.notif-btn:active { transform: scale(0.92); }
+.notif-btn.granted { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+.notif-btn.denied  { border-color: var(--gray-300); color: var(--gray-300); cursor: default; }
+
 /* ===== Responsive ===== */
 @media (max-width: 480px) {
   .tc-timer { font-size: 2.5rem; }
@@ -551,6 +569,7 @@ input.io-file-input { display: none; }
       <div class="header-sub" id="dashSubtitle"></div>
     </div>
     <div class="header-spacer"></div>
+    <button class="notif-btn" id="btnNotifToggle" title="通知設定" aria-label="通知設定">&#128276;</button>
     <button class="badge-btn" id="btnAddMore">＋ 追加</button>
   </div>
   <div class="dashboard-body">
@@ -806,6 +825,73 @@ function showScreen(id) {
   document.getElementById(id).classList.add('active');
 }
 
+// ===== Vibration =====
+function vibrate(pattern) {
+  if (navigator.vibrate) navigator.vibrate(pattern);
+}
+
+// ===== Notifications =====
+async function ensureNotificationPermission() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    await Notification.requestPermission();
+  }
+  updateNotifBtn();
+}
+
+function updateNotifBtn() {
+  const btn = document.getElementById('btnNotifToggle');
+  if (!btn) return;
+  if (!('Notification' in window)) {
+    btn.style.display = 'none';
+    return;
+  }
+  const perm = Notification.permission;
+  btn.classList.remove('granted', 'denied');
+  if (perm === 'granted') {
+    btn.textContent = '🔔';
+    btn.classList.add('granted');
+    btn.title = '通知: 許可済み';
+  } else if (perm === 'denied') {
+    btn.textContent = '🔕';
+    btn.classList.add('denied');
+    btn.title = '通知: ブラウザ設定でブロックされています';
+  } else {
+    btn.textContent = '🔔';
+    btn.title = '通知を許可する';
+  }
+}
+
+async function showStepNotification(timer, isAllDone) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const title = isAllDone
+    ? `✅ 染色完了 — ${timer.stain.name}`
+    : `⏱ ステップ終了 — ${timer.stain.name}`;
+  const body = isAllDone
+    ? '全ステップが完了しました'
+    : (() => {
+        const next = timer.stain.steps[timer.currentStepIndex + 1];
+        return next ? `次のステップ: ${next.name}` : '最終ステップが終了しました';
+      })();
+  const options = {
+    body,
+    icon: 'icons/icon-192.png',
+    badge: 'icons/icon-192.png',
+    tag: `timer-${timer.id}`,
+    renotify: true
+  };
+  try {
+    const reg = navigator.serviceWorker && await navigator.serviceWorker.ready;
+    if (reg && reg.showNotification) {
+      reg.showNotification(title, options);
+    } else {
+      new Notification(title, options);
+    }
+  } catch (_) {
+    try { new Notification(title, options); } catch (__) {}
+  }
+}
+
 // ===== Timer Instance Management =====
 function createTimerInstance(stain) {
   const step = stain.steps[0];
@@ -824,6 +910,7 @@ function createTimerInstance(stain) {
 
 function addStainTimer(stain) {
   ensureAudio();
+  ensureNotificationPermission();
   const timer = createTimerInstance(stain);
   activeTimers.push(timer);
   updateBadge();
@@ -886,6 +973,8 @@ function advanceStep(timer) {
   } else {
     timer.completed = true;
     playCompletionSound();
+    vibrate([300, 100, 300, 100, 300]);
+    showStepNotification(timer, true);
     renderCardContent(timer);
     updateBadge();
   }
@@ -894,6 +983,8 @@ function advanceStep(timer) {
 function onStepComplete(timer) {
   playAlarm();
   flashScreen();
+  vibrate([200, 100, 200]);
+  showStepNotification(timer, false);
   // Auto-advance after brief pause
   setTimeout(() => {
     if (!timer.completed) advanceStep(timer);
@@ -1700,8 +1791,21 @@ document.getElementById('fileInputXLSX').addEventListener('change', (e) => {
   if (e.target.files[0]) { importXLSX(e.target.files[0]); e.target.value = ''; }
 });
 
+// ===== Notification button handler =====
+document.getElementById('btnNotifToggle').addEventListener('click', async () => {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'denied') {
+    alert('通知がブラウザ設定でブロックされています。\nブラウザのサイト設定から通知を許可してください。');
+    return;
+  }
+  if (Notification.permission === 'granted') return; // already granted, nothing to do
+  await Notification.requestPermission();
+  updateNotifBtn();
+});
+
 // ===== Init =====
 renderSelectScreen();
+updateNotifBtn();
 </script>
 <script>
 if ('serviceWorker' in navigator) {
