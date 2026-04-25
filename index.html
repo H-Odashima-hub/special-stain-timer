@@ -615,14 +615,16 @@ input.io-file-input { display: none; }
 // ===== Preset Stain Data =====
 // 共通前処理ステップ（脱パラフィン・脱キシレン・段階的親水化）
 const DEPARAFFINIZATION_STEPS = [
-  { name: 'キシレン I（脱パラフィン）',        duration: 300, note: 'パラフィンを溶解・除去' },
-  { name: 'キシレン II（脱パラフィン）',       duration: 300, note: 'パラフィンを溶解・除去' },
-  { name: '100% エタノール I（脱キシレン）',   duration: 180, note: 'キシレンを除去' },
-  { name: '100% エタノール II（脱キシレン）',  duration: 180, note: 'キシレンを除去' },
-  { name: '95% エタノール（親水化）',          duration: 180, note: '段階的に親水化' },
-  { name: '80% エタノール（親水化）',          duration: 180, note: '' },
-  { name: '70% エタノール（親水化）',          duration: 180, note: '' },
-  { name: '流水（水洗）',                      duration: 180, note: '蒸留水または流水' }
+  { name: 'キシレン I（脱パラフィン）',         duration: 300, note: 'パラフィンを溶解・除去' },
+  { name: 'キシレン II（脱パラフィン）',        duration: 300, note: 'パラフィンを溶解・除去' },
+  { name: 'キシレン III（脱パラフィン）',       duration: 300, note: 'パラフィンを溶解・除去' },
+  { name: '100% エタノール I（脱キシレン）',    duration: 180, note: 'キシレンを除去' },
+  { name: '100% エタノール II（脱キシレン）',   duration: 180, note: 'キシレンを除去' },
+  { name: '100% エタノール III（脱キシレン）',  duration: 180, note: 'キシレンを除去' },
+  { name: '95% エタノール（親水化）',           duration: 180, note: '段階的に親水化' },
+  { name: '80% エタノール（親水化）',           duration: 180, note: '' },
+  { name: '70% エタノール（親水化）',           duration: 180, note: '' },
+  { name: '流水（水洗）',                       duration: 180, note: '蒸留水または流水' }
 ];
 
 const PRESETS = [
