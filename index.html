@@ -383,6 +383,81 @@ input.io-file-input { display: none; }
 .tc-toggle-arrow { transition: transform 0.3s; display: inline-block; }
 .tc-toggle-arrow.open { transform: rotate(180deg); }
 
+/* ===== Step Timeline Tabs ===== */
+.tc-step-tabs {
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  gap: 0;
+  padding: 12px 14px;
+  border-top: 1px solid var(--gray-200);
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.tc-step-tabs::-webkit-scrollbar { display: none; }
+
+.tc-step-tab {
+  flex-shrink: 0;
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  border: 2px solid var(--gray-200);
+  background: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.7rem; font-weight: 700;
+  color: var(--gray-400);
+  cursor: pointer;
+  transition: all 0.18s;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.tc-step-tab:hover { border-color: var(--primary); color: var(--primary); }
+.tc-step-tab.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(37,99,235,0.38);
+  transform: scale(1.2);
+  z-index: 1;
+  position: relative;
+  font-size: 0.78rem;
+}
+.tc-step-tab.done {
+  background: var(--success-light);
+  border-color: var(--success);
+  color: var(--success);
+}
+.tc-step-tab.selected:not(.active) {
+  outline: 2px solid var(--gray-500);
+  outline-offset: 2px;
+}
+
+.tc-step-connector {
+  flex-shrink: 0;
+  width: 10px; height: 2px;
+  background: var(--gray-200);
+  border-radius: 1px;
+}
+.tc-step-connector.done { background: var(--success); }
+
+.tc-step-detail {
+  margin: 0 14px 12px;
+  padding: 10px 14px;
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+  font-size: 0.82rem;
+  animation: detailFadeIn 0.15s ease;
+}
+.tc-step-detail.hidden { display: none; }
+.tc-step-detail-label { font-size: 0.7rem; color: var(--gray-400); margin-bottom: 3px; }
+.tc-step-detail-name  { font-weight: 700; color: var(--gray-800); }
+.tc-step-detail-meta  { color: var(--gray-500); margin-top: 4px; font-size: 0.78rem; }
+
+@keyframes detailFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 .step-item {
   display: flex; align-items: center; gap: 10px;
   padding: 8px 12px; border-radius: 8px; margin-bottom: 2px; font-size: 0.85rem;
@@ -924,8 +999,7 @@ function createTimerInstance(stain) {
     totalStepSeconds: step.duration,
     isRunning: false,
     intervalId: null,
-    completed: false,
-    expanded: false
+    completed: false
   };
 }
 
@@ -1197,15 +1271,15 @@ function buildCardHTML(timer) {
 
   const btnLabel = timer.isRunning ? '一時停止' : (timer.remainingSeconds < timer.totalStepSeconds ? '再開' : '開始');
 
-  const stepsHTML = stain.steps.map((s, i) => {
-    let cls = 'step-item';
+  const tabsHTML = stain.steps.map((s, i) => {
+    let cls = 'tc-step-tab';
     if (i === timer.currentStepIndex) cls += ' active';
-    else if (i < timer.currentStepIndex) cls += ' completed';
-    return `<div class="${cls}">
-      <div class="step-number">${i < timer.currentStepIndex ? '✓' : i + 1}</div>
-      <div class="step-name">${s.name}</div>
-      <div class="step-duration">${formatDuration(s.duration)}</div>
-    </div>`;
+    else if (i < timer.currentStepIndex) cls += ' done';
+    const label = i < timer.currentStepIndex ? '✓' : i + 1;
+    const connector = i < stain.steps.length - 1
+      ? `<span class="tc-step-connector${i < timer.currentStepIndex ? ' done' : ''}"></span>`
+      : '';
+    return `<div class="${cls}" data-action="tab" data-step="${i}" data-timer="${timer.id}">${label}</div>${connector}`;
   }).join('');
 
   return `
@@ -1229,13 +1303,8 @@ function buildCardHTML(timer) {
         <button class="tc-btn tc-btn-secondary tc-btn-icon" data-action="skip" data-timer="${timer.id}" title="スキップ">&#9197;</button>
       </div>
     </div>
-    <button class="tc-toggle" data-action="expand" data-timer="${timer.id}">
-      <span>全ステップ</span>
-      <span class="tc-toggle-arrow ${timer.expanded ? 'open' : ''}" data-timer-arrow="${timer.id}">&#9660;</span>
-    </button>
-    <div class="tc-steps ${timer.expanded ? 'expanded' : ''}" data-timer-steps="${timer.id}">
-      <div class="tc-steps-inner">${stepsHTML}</div>
-    </div>`;
+    <div class="tc-step-tabs" id="tabs-${timer.id}">${tabsHTML}</div>
+    <div class="tc-step-detail hidden" id="tab-detail-${timer.id}"></div>`;
 }
 
 function attachCardEvents(timer, card) {
@@ -1245,15 +1314,30 @@ function attachCardEvents(timer, card) {
       const action = el.dataset.action;
       if (action === 'toggle') toggleTimerInstance(timer);
       else if (action === 'skip') skipStep(timer);
-      else if (action === 'expand') {
-        timer.expanded = !timer.expanded;
-        const steps = card.querySelector(`[data-timer-steps="${timer.id}"]`);
-        const arrow = card.querySelector(`[data-timer-arrow="${timer.id}"]`);
-        if (steps) steps.classList.toggle('expanded', timer.expanded);
-        if (arrow) arrow.classList.toggle('open', timer.expanded);
+      else if (action === 'tab') {
+        const stepIdx = parseInt(el.dataset.step);
+        const detailEl = card.querySelector(`#tab-detail-${timer.id}`);
+        const s = timer.stain.steps[stepIdx];
+        const alreadyOpen = !detailEl.classList.contains('hidden')
+          && detailEl.dataset.selectedStep == stepIdx;
+        card.querySelectorAll('.tc-step-tab').forEach(t => t.classList.remove('selected'));
+        if (alreadyOpen) {
+          detailEl.classList.add('hidden');
+        } else {
+          el.classList.add('selected');
+          detailEl.dataset.selectedStep = stepIdx;
+          detailEl.classList.remove('hidden');
+          detailEl.innerHTML = `
+            <div class="tc-step-detail-label">ステップ ${stepIdx + 1} / ${timer.stain.steps.length}</div>
+            <div class="tc-step-detail-name">${escapeHtml(s.name)}</div>
+            <div class="tc-step-detail-meta">${formatDuration(s.duration)}${s.note ? ` &nbsp;—&nbsp; ${escapeHtml(s.note)}` : ''}</div>`;
+        }
       }
     });
   });
+
+  // Scroll active tab into view after DOM settles
+  requestAnimationFrame(() => scrollToActiveTab(timer.id));
 
   card.querySelectorAll('.tc-close').forEach(el => {
     el.addEventListener('click', (e) => {
@@ -1296,6 +1380,13 @@ function updateCardDisplay(timer) {
   card.className = 'timer-card';
   if (timer.isRunning) card.classList.add('running');
   if (timer.completed) card.classList.add('all-done');
+}
+
+function scrollToActiveTab(timerId) {
+  const tabs = document.getElementById(`tabs-${timerId}`);
+  if (!tabs) return;
+  const active = tabs.querySelector('.tc-step-tab.active');
+  if (active) active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
 }
 
 function renderCardContent(timer) {
