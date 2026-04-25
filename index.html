@@ -613,10 +613,23 @@ input.io-file-input { display: none; }
 
 <script>
 // ===== Preset Stain Data =====
+// 共通前処理ステップ（脱パラフィン・脱キシレン・段階的親水化）
+const DEPARAFFINIZATION_STEPS = [
+  { name: 'キシレン I（脱パラフィン）',        duration: 300, note: 'パラフィンを溶解・除去' },
+  { name: 'キシレン II（脱パラフィン）',       duration: 300, note: 'パラフィンを溶解・除去' },
+  { name: '100% エタノール I（脱キシレン）',   duration: 180, note: 'キシレンを除去' },
+  { name: '100% エタノール II（脱キシレン）',  duration: 180, note: 'キシレンを除去' },
+  { name: '95% エタノール（親水化）',          duration: 180, note: '段階的に親水化' },
+  { name: '80% エタノール（親水化）',          duration: 180, note: '' },
+  { name: '70% エタノール（親水化）',          duration: 180, note: '' },
+  { name: '流水（水洗）',                      duration: 180, note: '蒸留水または流水' }
+];
+
 const PRESETS = [
   {
     id: 'pas', name: 'PAS染色', nameEn: 'Periodic Acid-Schiff',
     steps: [
+      ...DEPARAFFINIZATION_STEPS,
       { name: '過ヨウ素酸液', duration: 300, note: '0.5〜1% 過ヨウ素酸水溶液' },
       { name: '水洗', duration: 60, note: '流水' },
       { name: 'シッフ試薬', duration: 900, note: '遮光して反応' },
@@ -631,6 +644,7 @@ const PRESETS = [
   {
     id: 'masson', name: 'マッソントリクローム染色', nameEn: "Masson's Trichrome",
     steps: [
+      ...DEPARAFFINIZATION_STEPS,
       { name: 'マイヤーヘマトキシリン', duration: 600, note: '核染色' },
       { name: '流水（色出し）', duration: 600, note: '' },
       { name: 'ポンソーフクシン液', duration: 300, note: '' },
@@ -643,6 +657,7 @@ const PRESETS = [
   {
     id: 'evg', name: 'EVG染色', nameEn: 'Elastica van Gieson',
     steps: [
+      ...DEPARAFFINIZATION_STEPS,
       { name: 'レゾルシンフクシン液', duration: 1800, note: '弾性線維染色' },
       { name: '水洗', duration: 60, note: '' },
       { name: '分別（塩酸アルコール）', duration: 30, note: '鏡検で確認しながら' },
@@ -653,6 +668,7 @@ const PRESETS = [
   {
     id: 'pam', name: 'PAM染色', nameEn: 'Periodic Acid Methenamine Silver',
     steps: [
+      ...DEPARAFFINIZATION_STEPS,
       { name: '過ヨウ素酸', duration: 1200, note: '1% 過ヨウ素酸水溶液' },
       { name: '水洗', duration: 120, note: '' },
       { name: 'メセナミン銀液', duration: 3600, note: '58〜60°C で反応、鏡検で確認' },
@@ -665,6 +681,7 @@ const PRESETS = [
   {
     id: 'azan', name: 'アザン染色', nameEn: 'Azan stain',
     steps: [
+      ...DEPARAFFINIZATION_STEPS,
       { name: 'アゾカルミンG液', duration: 3600, note: '56°C 温浴で反応' },
       { name: 'アニリンアルコール', duration: 60, note: '分別、鏡検で確認' },
       { name: '酢酸アルコール', duration: 60, note: '分別停止' },
@@ -676,6 +693,7 @@ const PRESETS = [
   {
     id: 'congo', name: 'コンゴーレッド染色', nameEn: 'Congo Red',
     steps: [
+      ...DEPARAFFINIZATION_STEPS,
       { name: 'コンゴーレッド液', duration: 1800, note: 'アミロイド染色' },
       { name: '水洗', duration: 60, note: '' },
       { name: 'マイヤーヘマトキシリン（核染色）', duration: 300, note: '' },
@@ -685,6 +703,7 @@ const PRESETS = [
   {
     id: 'berlin', name: 'ベルリンブルー染色', nameEn: 'Berlin Blue (Prussian Blue)',
     steps: [
+      ...DEPARAFFINIZATION_STEPS,
       { name: 'フェロシアン化カリウム・塩酸液', duration: 1800, note: '鉄の検出' },
       { name: '水洗', duration: 120, note: '' },
       { name: 'ケルンエヒトロート（核染色）', duration: 300, note: '' },
